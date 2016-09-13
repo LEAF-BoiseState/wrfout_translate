@@ -183,6 +183,12 @@ int main(int argc, char *argv[]) {
     adfGeoTransform[4] = 0.0;
     adfGeoTransform[5] = -dfDeltaY;
 
+    /* Shift 1/2 pixel.  Unkown if needed */
+    /*
+    adfGeoTransform[0] -= dfDeltaX / 2.0;
+    adfGeoTransform[3] += dfDeltaY / 2.0;
+    */
+
     hOutDS = GDALCreateCopy(hDrv, pszOut, hWrfDS, FALSE, NULL, GDALTermProgress,
                             NULL);
     if (hOutDS == NULL) {
