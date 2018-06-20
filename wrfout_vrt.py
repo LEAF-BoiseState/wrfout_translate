@@ -1,5 +1,10 @@
-import os, sys
+#!/usr/bin/env python
 
+# Copyright (c) 2018, Boise State University All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.import os, sys
+
+import os, sys
 
 from osgeo import gdal, osr
 
@@ -344,6 +349,8 @@ gt[3] -= dy / 2.0;
 drv = gdal.GetDriverByName("VRT")
 for sds in ds.GetSubDatasets():
     tag, file, var = sds[0].split(":")
+    if var in ("Times", "XLAT", "XLONG"):
+        continue
     ds = gdal.Open(sds[0])
     vrt = drv.CreateCopy("/vsimem/{}.vrt".format(var), ds)
     vrt.SetProjection(wkt)
