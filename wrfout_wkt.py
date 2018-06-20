@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-
 # Copyright (c) 2018, Boise State University All rights reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.import os, sys
 
+import os, sys
 from osgeo import gdal, osr
 
 # The Lambert Conformal Conic with 2 standard parallels for wrfout files.  The
