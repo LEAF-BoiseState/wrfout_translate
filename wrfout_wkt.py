@@ -96,8 +96,12 @@ x, y, z = ct.TransformPoint(x, y)
 
 dx = float(ds.GetMetadataItem("NC_GLOBAL#DX"))
 dy =  float(ds.GetMetadataItem("NC_GLOBAL#DY"))
-nx = ds.RasterXSize
-ny = ds.RasterYSize
+sds = gdal.Open(ds.GetSubDatasets()[0][0])
+if sds is None:
+    print("invalid subdataset")
+    os.Exit(1)
+nx = sds.RasterXSize
+ny = sds.RasterYSize
 gt = [x - ((nx / 2) * dx), dx, 0.0, dy + ((ny / 2) * dy), 0.0,  -dy]
 # Shift 1/2 pixel.  Unkown if needed
 gt[0] -= dx / 2.0;
