@@ -14,7 +14,7 @@ from osgeo import gdal, osr
 # NC_GLOBAL#MOAD_CEN_LAT
 # NC_GLOBAL#TRUELAT1
 # NC_GLOBAL#TRUELAT2
-wrf_wkt = '''
+wrf_wkt_lcc = '''
 PROJCS["WGC 84 / WRF Lambert",
    GEOGCS["WGS 84",
        DATUM["World Geodetic System 1984",
@@ -39,6 +39,20 @@ PROJCS["WGC 84 / WRF Lambert",
    AXIS["Northing",NORTH]];
 '''
 
+wrf_wkt_mercator = '''
+PROJCS["World_Mercator",
+   GEOGCS["GCS_WGS_1984",
+      DATUM["WGS_1984",
+         SPHEROID["WGS_1984",6378137,298.257223563]],
+      PRIMEM["Greenwich",0],
+      UNIT["Degree",0.017453292519943295]],PROJECTION["Mercator_1SP"],
+      PARAMETER["False_Easting",0],
+      PARAMETER["False_Northing",0],
+      PARAMETER["Central_Meridian","{}"],
+      PARAMETER["latitude_of_origin","{}"],
+      UNIT["Meter",1]]
+'''
+
 req_meta = ["NC_GLOBAL#STAND_LON",
             "NC_GLOBAL#MOAD_CEN_LAT",
             "NC_GLOBAL#TRUELAT1",
@@ -47,6 +61,7 @@ req_meta = ["NC_GLOBAL#STAND_LON",
             "NC_GLOBAL#CEN_LAT",
             "NC_GLOBAL#DX",
             "NC_GLOBAL#DY",
+            "NC_GLOBAL#MAP_PROJ",
            ]
 
 gdal.SetConfigOption("GDAL_PAM_ENABLED", "NO")
@@ -62,11 +77,16 @@ for md in req_meta:
     if md is None:
         print("missing required metadata: %s", md)
         os.Exit(1)
+proj = ds.GetMetadataItem("NC_GLOBAL#MAP_PROJ")
 
-wkt = wrf_wkt.format(ds.GetMetadataItem("NC_GLOBAL#STAND_LON"),
-                     ds.GetMetadataItem("NC_GLOBAL#MOAD_CEN_LAT"),
-                     ds.GetMetadataItem("NC_GLOBAL#TRUELAT1"),
-                     ds.GetMetadataItem("NC_GLOBAL#TRUELAT2"))
+if proj is "1":
+    wkt = wrf_wkt_lcc.format(ds.GetMetadataItem("NC_GLOBAL#STAND_LON"),
+                         ds.GetMetadataItem("NC_GLOBAL#MOAD_CEN_LAT"),
+                         ds.GetMetadataItem("NC_GLOBAL#TRUELAT1"),
+                         ds.GetMetadataItem("NC_GLOBAL#TRUELAT2"))
+elif proj is "3":
+    wkt = wrf_wkt_mercator.format(ds.GetMetadataItem("NC_GLOBAL#STAND_LON"),
+                                ds.GetMetadataItem("NC_GLOBAL#MOAD_CEN_LAT"))
 
 wrf_srs = osr.SpatialReference(wkt)
 srs = osr.SpatialReference()

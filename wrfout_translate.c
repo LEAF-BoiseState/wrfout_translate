@@ -25,8 +25,8 @@
 ** For more information, please refer to <http://unlicense.org>
 */
 
-#include "gdal.h"
 #include "cpl_string.h"
+#include "gdal.h"
 #include "ogr_srs_api.h"
 
 const char *apszDrivers[] = {"netCDF", NULL};
@@ -39,7 +39,7 @@ const char *apszDrivers[] = {"netCDF", NULL};
 ** NC_GLOBAL#TRUELAT1
 ** NC_GLOBAL#TRUELAT2
 */
-const char *pszWrfWkt =
+const char *pszWrfLCC =
     "PROJCS[\"WGC 84 / WRF Lambert\","
     "   GEOGCS[\"WGS 84\","
     "       DATUM[\"World Geodetic System 1984\","
@@ -63,86 +63,112 @@ const char *pszWrfWkt =
     "   AXIS[\"Easting\",EAST],"
     "   AXIS[\"Northing\",NORTH]]";
 
+const char *pszWrfMercator = "PROJCS[\"World_Mercator\","
+                            "GEOGCS[\"GCS_WGS_1984\","
+                            "DATUM[\"WGS_1984\","
+                            "SPHEROID[\"WGS_1984\",6378137,298.257223563]],"
+                            "PRIMEM[\"Greenwich\",0],"
+                            "UNIT[\"Degree\",0.017453292519943295]],"
+                            "PROJECTION[\"Mercator_1SP\"],"
+                            "PARAMETER[\"False_Easting\",0],"
+                            "PARAMETER[\"False_Northing\",0],"
+                            "PARAMETER[\"Central_Meridian\",%s],"
+                            "PARAMETER[\"latitude_of_origin\",%s],"
+                              "UNIT[\"Meter\",1]]";
+
 const char *apszRequiredMetadata[] = {
-    "NC_GLOBAL#STAND_LON", "NC_GLOBAL#MOAD_CEN_LAT", "NC_GLOBAL#TRUELAT1",
-    "NC_GLOBAL#TRUELAT2",  "NC_GLOBAL#CEN_LON",      "NC_GLOBAL#CEN_LAT",
-    "NC_GLOBAL#DX",        "NC_GLOBAL#DY",           NULL};
+    "NC_GLOBAL#STAND_LON", "NC_GLOBAL#MOAD_CEN_LAT",
+    "NC_GLOBAL#TRUELAT1",  "NC_GLOBAL#TRUELAT2",
+    "NC_GLOBAL#CEN_LON",   "NC_GLOBAL#CEN_LAT",
+    "NC_GLOBAL#DX",        "NC_GLOBAL#DY",
+    "NC_GLOBAL#MAP_PROJ",  NULL};
 
 int main(int argc, char *argv[]) {
-    const char *pszWrf = NULL;
-    const char *pszOut = NULL;
-    const char *pszFrmt = "GTiff";
-    GDALDatasetH hWrfDS, hOutDS;
-    GDALDriverH hDrv = NULL;
-    char *pszWkt = NULL;
-    OGRSpatialReferenceH hSrcSRS, hTargetSRS;
-    OGRCoordinateTransformationH hCT = NULL;
-    char **papszSubDatasets = NULL;
-    const char *pszMetadata;
-    int nXSize, nYSize;
-    double dfX, dfY;
-    double dfDeltaX, dfDeltaY;
-    double adfGeoTransform[6];
-    int rc = 0;
-    int i = 1;
-    while (i < argc) {
-        if (EQUAL(argv[i], "-of") && i < argc - 2) {
-            pszFrmt = argv[++i];
-        } else if (pszWrf == NULL) {
-            pszWrf = argv[i];
-        } else if (pszOut == NULL) {
-            pszOut = argv[i];
-        }
-        i++;
+  const char *pszWrf = NULL;
+  const char *pszOut = NULL;
+  const char *pszFrmt = "GTiff";
+  const char *pszMapProj = NULL;
+  GDALDatasetH hWrfDS, hOutDS;
+  GDALDriverH hDrv = NULL;
+  char *pszWkt = NULL;
+  OGRSpatialReferenceH hSrcSRS, hTargetSRS;
+  OGRCoordinateTransformationH hCT = NULL;
+  char **papszSubDatasets = NULL;
+  const char *pszMetadata;
+  int nXSize, nYSize;
+  double dfX, dfY;
+  double dfDeltaX, dfDeltaY;
+  double adfGeoTransform[6];
+  int rc = 0;
+  int i = 1;
+  while (i < argc) {
+    if (EQUAL(argv[i], "-of") && i < argc - 2) {
+      pszFrmt = argv[++i];
+    } else if (pszWrf == NULL) {
+      pszWrf = argv[i];
+    } else if (pszOut == NULL) {
+      pszOut = argv[i];
     }
-    if (pszWrf == NULL) {
-        fprintf(stderr, "no wrf subdataset provided\n");
-        exit(1);
-    }
-    if (pszWrf == NULL) {
-        fprintf(stderr, "no output subdataset provided\n");
-        exit(1);
-    }
+    i++;
+  }
+  if (pszWrf == NULL) {
+    fprintf(stderr, "no wrf subdataset provided\n");
+    exit(1);
+  }
+  if (pszWrf == NULL) {
+    fprintf(stderr, "no output subdataset provided\n");
+    exit(1);
+  }
 
-    GDALAllRegister();
+  GDALAllRegister();
 
-    hDrv = GDALGetDriverByName(pszFrmt);
-    if (hDrv == NULL) {
-        fprintf(stderr, "invalid output format");
-        exit(1);
-    }
+  hDrv = GDALGetDriverByName(pszFrmt);
+  if (hDrv == NULL) {
+    fprintf(stderr, "invalid output format");
+    exit(1);
+  }
 
-    hWrfDS = GDALOpenEx(pszWrf, GDAL_OF_RASTER | GDAL_OF_READONLY, apszDrivers,
-                        NULL, NULL);
-    if (hWrfDS == NULL) {
-        exit(1);
-    }
-    papszSubDatasets = GDALGetMetadata(hWrfDS, "SUBDATASETS");
-    if (CSLCount(papszSubDatasets) > 0) {
-        fprintf(stderr, "please specify a subdataset\n");
-        exit(1);
-    }
+  hWrfDS = GDALOpenEx(pszWrf, GDAL_OF_RASTER | GDAL_OF_READONLY, apszDrivers,
+                      NULL, NULL);
+  if (hWrfDS == NULL) {
+    exit(1);
+  }
+  papszSubDatasets = GDALGetMetadata(hWrfDS, "SUBDATASETS");
+  if (CSLCount(papszSubDatasets) > 0) {
+    fprintf(stderr, "please specify a subdataset\n");
+    exit(1);
+  }
 
-    for (i = 0; apszRequiredMetadata[i] != NULL; i++) {
-        pszMetadata =
-            GDALGetMetadataItem(hWrfDS, apszRequiredMetadata[i], NULL);
-        if (pszMetadata == NULL) {
-            fprintf(stderr, "failed to get required metadata: %s\n",
-                    apszRequiredMetadata[i]);
-            exit(1);
-        }
+  for (i = 0; apszRequiredMetadata[i] != NULL; i++) {
+    pszMetadata = GDALGetMetadataItem(hWrfDS, apszRequiredMetadata[i], NULL);
+    if (pszMetadata == NULL) {
+      fprintf(stderr, "failed to get required metadata: %s\n",
+              apszRequiredMetadata[i]);
+      exit(1);
     }
+  }
+  pszMapProj = GDALGetMetadataItem(hWrfDS, "NC_GLOBAL#MAP_PROJ", NULL);
+  if (EQUALN(pszMapProj, "1", 1)) {
     pszWkt = CPLStrdup(CPLSPrintf(
-        pszWrfWkt, GDALGetMetadataItem(hWrfDS, "NC_GLOBAL#STAND_LON", NULL),
+        pszWrfLCC, GDALGetMetadataItem(hWrfDS, "NC_GLOBAL#STAND_LON", NULL),
         GDALGetMetadataItem(hWrfDS, "NC_GLOBAL#MOAD_CEN_LAT", NULL),
         GDALGetMetadataItem(hWrfDS, "NC_GLOBAL#TRUELAT1", NULL),
         GDALGetMetadataItem(hWrfDS, "NC_GLOBAL#TRUELAT2", NULL)));
+  } else if(EQUALN(pszMapProj, "3", 1)) {
+    pszWkt = CPLStrdup(CPLSPrintf(
+        pszWrfMercator,
+        GDALGetMetadataItem(hWrfDS, "NC_GLOBAL#STAND_LON", NULL),
+        GDALGetMetadataItem(hWrfDS, "NC_GLOBAL#MOAD_CEN_LAT", NULL)));
+    } else {
+    fprintf(stderr, "invalid projection: %s", pszMapProj);
+    exit(2);
+			}
     hTargetSRS = OSRNewSpatialReference(pszWkt);
     if (hTargetSRS == NULL) {
-        CPLFree(pszWkt);
-        GDALClose(hWrfDS);
-        fprintf(stderr, "failed to create target spatial reference");
-        exit(1);
+    CPLFree(pszWkt);
+    GDALClose(hWrfDS);
+    fprintf(stderr, "failed to create target spatial reference");
+    exit(1);
     }
 
     hSrcSRS = OSRNewSpatialReference(NULL);
@@ -150,12 +176,12 @@ int main(int argc, char *argv[]) {
 
     hCT = OCTNewCoordinateTransformation(hSrcSRS, hTargetSRS);
     if (hCT == NULL) {
-        CPLFree(pszWkt);
-        GDALClose(hWrfDS);
-        OSRDestroySpatialReference(hSrcSRS);
-        OSRDestroySpatialReference(hTargetSRS);
-        fprintf(stderr, "failed to created coordinate tranform\n");
-        exit(1);
+    CPLFree(pszWkt);
+    GDALClose(hWrfDS);
+    OSRDestroySpatialReference(hSrcSRS);
+    OSRDestroySpatialReference(hTargetSRS);
+    fprintf(stderr, "failed to created coordinate tranform\n");
+    exit(1);
     }
 
     dfX = CPLAtof(GDALGetMetadataItem(hWrfDS, "NC_GLOBAL#CEN_LON", NULL));
@@ -166,10 +192,10 @@ int main(int argc, char *argv[]) {
     OSRDestroySpatialReference(hTargetSRS);
     OCTDestroyCoordinateTransformation(hCT);
     if (rc == 0) {
-        CPLFree(pszWkt);
-        GDALClose(hWrfDS);
-        fprintf(stderr, "failed to transform coordinates\n");
-        exit(1);
+    CPLFree(pszWkt);
+    GDALClose(hWrfDS);
+    fprintf(stderr, "failed to transform coordinates\n");
+    exit(1);
     }
 
     dfDeltaX = CPLAtof(GDALGetMetadataItem(hWrfDS, "NC_GLOBAL#DX", NULL));
@@ -192,10 +218,10 @@ int main(int argc, char *argv[]) {
     hOutDS = GDALCreateCopy(hDrv, pszOut, hWrfDS, FALSE, NULL, GDALTermProgress,
                             NULL);
     if (hOutDS == NULL) {
-        CPLFree(pszWkt);
-        GDALClose(hWrfDS);
-        fprintf(stderr, "failed to created target dataset\n");
-        exit(1);
+    CPLFree(pszWkt);
+    GDALClose(hWrfDS);
+    fprintf(stderr, "failed to created target dataset\n");
+    exit(1);
     }
     GDALSetProjection(hOutDS, pszWkt);
     GDALSetGeoTransform(hOutDS, adfGeoTransform);
